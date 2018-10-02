@@ -29,12 +29,50 @@ RSpec.describe Stoplight::Notifier::Pagerduty do
     let(:to_color) { Stoplight::Color::RED }
     let(:notifier) { described_class.new(pagerduty) }
     let(:pagerduty) { double(Pagerduty).as_null_object }
+    let(:incident_key) { "breaker_#{light.name}" }
+    let(:error) { nil }
 
-    it 'pings Pagerduty' do
-      error = nil
-      message = notifier.formatter.call(light, from_color, to_color, error)
-      expect(pagerduty).to receive(:trigger).with(message)
-      notifier.notify(light, from_color, to_color, error)
+    context 'when switching from green to red' do
+      let(:from_color) { Stoplight::Color::GREEN }
+      let(:to_color) { Stoplight::Color::RED }
+
+      it 'triggers an incident for the specific light in Pagerduty' do
+        message = notifier.formatter.call(light, from_color, to_color, error)
+
+        expect(pagerduty).to receive(:trigger)
+          .with(message, incident_key: incident_key)
+
+        notifier.notify(light, from_color, to_color, error)
+      end
+    end
+
+    context 'when switching from red to green' do
+      let(:from_color) { Stoplight::Color::RED }
+      let(:to_color) { Stoplight::Color::GREEN }
+      let(:incident) { double(:incident) }
+
+      before do
+        allow(pagerduty).to receive(:get_incident)
+          .with(incident_key).and_return(incident)
+      end
+
+      it 'resolves an incident related to the specific light in Pagerduty' do
+        expect(incident).to receive(:resolve)
+
+        notifier.notify(light, from_color, to_color, error)
+      end
+
+      context 'if no incident is found for the specified key' do
+        before do
+          allow(pagerduty).to receive(:get_incident)
+            .with(incident_key).and_return(nil)
+        end
+
+        it 'does not attempt to resolve an unfound incident' do
+          expect(incident).not_to receive(:resolve)
+          notifier.notify(light, from_color, to_color, error)
+        end
+      end
     end
   end
 end

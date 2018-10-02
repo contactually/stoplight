@@ -11,10 +11,19 @@ module Stoplight
         @object
       end
 
-      private
+      # @see Base#notify
+      def notify(light, from_color, to_color, error)
+        message = formatter.call(light, from_color, to_color, error)
 
-      def put(message)
-        pagerduty.trigger(message)
+        incident_key = "breaker_#{light.name}"
+        if to_color == Stoplight::Color::RED
+          pagerduty.trigger(message, incident_key: incident_key)
+        elsif to_color == Stoplight::Color::GREEN
+          incident = pagerduty.get_incident(incident_key)
+          incident.resolve if incident.present?
+        end
+
+        message
       end
     end
   end
